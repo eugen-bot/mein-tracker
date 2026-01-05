@@ -96,7 +96,7 @@ def analyze_image(image):
         return "Fehler: Kein API Key hinterlegt."
     
     # HIER IST DIE ÄNDERUNG: PRO STATT FLASH
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = "Analysiere dieses Supplement. Antworte kurz: Name, Dosis, Zeit."
     try:
