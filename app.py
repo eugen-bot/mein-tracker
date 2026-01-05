@@ -57,7 +57,6 @@ def get_plan_katharina():
 st.sidebar.header("Benutzerprofil")
 user = st.sidebar.radio("Wer nutzt die App?", ["Eugen", "Katharina"])
 
-# Session State Logik
 if 'current_user' not in st.session_state:
     st.session_state.current_user = user
 
@@ -81,21 +80,41 @@ def delete_item(category, item_name):
     st.rerun()
 
 def analyze_image(image):
-    # Prüfung auf API Key
     if "GOOGLE_API_KEY" not in st.secrets:
         return "Fehler: Kein API Key in den Secrets gefunden."
     
-    try:
-        # HIER IST DER UNTERSCHIED: Neuer Client, neue Syntax
-        client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-        
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=[image, "Analysiere dieses Supplement. Antworte kurz: Name, Dosis, Zeit."]
-        )
-        return response.text
-    except Exception as e:
-        return f"Fehler bei der Analyse: {e}"
+    # DER NEUE 'AUTO-PILOT'
+    # Wir probieren nacheinander diese Modelle durch.
+    # Wenn eines nicht da ist (404), nimmt er sofort das nächste.
+    models_to_try = [
+        "gemini-1.5-flash",       # Standard Name
+        "gemini-1.5-flash-001",   # Ältere Version (oft stabil)
+        "gemini-1.5-flash-002",   # Neuere Version
+        "gemini-1.5-pro",         # Das Starke Modell
+        "gemini-1.5-pro-latest"   # Fallback
+    ]
+
+    client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+    
+    last_error = ""
+    
+    for model_name in models_to_try:
+        try:
+            # Versuch mit aktuellem Modell
+            response = client.models.generate_content(
+                model=model_name,
+                contents=[image, "Analysiere dieses Supplement. Antworte kurz: Name, Dosis, Zeit."]
+            )
+            # Wenn wir hier ankommen, hat es geklappt!
+            return f"✅ Analyse mit {model_name}:\n{response.text}"
+            
+        except Exception as e:
+            # Fehler speichern und weitermachen
+            last_error = str(e)
+            continue 
+            
+    # Wenn gar nichts ging:
+    return f"Alle Modelle fehlgeschlagen. Letzter Fehler: {last_error}"
 
 # --- HAUPT-APP ---
 st.title(f"💊 Plan für {user}")
@@ -118,7 +137,7 @@ with tab2:
     if img_file:
         image = Image.open(img_file)
         st.image(image, width=200)
-        with st.spinner("Analysiere..."):
+        with st.spinner("KI sucht passendes Modell..."):
             st.info(analyze_image(image))
 
 with tab3:
