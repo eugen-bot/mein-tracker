@@ -14,7 +14,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- DATEN: DEIN PLAN ---
+# --- DATEN: EUGEN ---
 def get_plan_eugen():
     return {
         "PRIO (Arzt)": [{"name": "Valsamtrio", "dosis": "Nach Anweisung", "info": "Blutdrucksenker. Morgens!"}],
@@ -41,9 +41,8 @@ def get_plan_eugen():
         ]
     }
 
-# --- DATEN: PLAN FÜR KATHARINA ---
+# --- DATEN: KATHARINA ---
 def get_plan_katharina():
-    # Hier kannst du Katharinas echte Mittel eintragen
     return {
         "Morgens": [
             {"name": "Multivitamin", "dosis": "1 Tablette", "info": "Basis-Versorgung"},
@@ -56,23 +55,20 @@ def get_plan_katharina():
 
 # --- SIDEBAR: PROFIL WAHL ---
 st.sidebar.header("Benutzerprofil")
-# Jetzt mit Katharina statt Freund
 user = st.sidebar.radio("Wer nutzt die App?", ["Eugen", "Katharina"])
 
-# Session State Logik für Benutzerwechsel
+# Session State Logik
 if 'current_user' not in st.session_state:
     st.session_state.current_user = user
 
 if st.session_state.current_user != user:
     st.session_state.current_user = user
-    # Plan neu laden basierend auf Auswahl
     if user == "Eugen":
         st.session_state.plan = get_plan_eugen()
     else:
         st.session_state.plan = get_plan_katharina()
     st.rerun()
 
-# Initiales Laden
 if 'plan' not in st.session_state:
     if user == "Eugen":
         st.session_state.plan = get_plan_eugen()
@@ -85,19 +81,21 @@ def delete_item(category, item_name):
     st.rerun()
 
 def analyze_image(image):
+    # Prüfung auf API Key
     if "GOOGLE_API_KEY" not in st.secrets:
         return "Fehler: Kein API Key in den Secrets gefunden."
     
-    # Nutzung der neuen google-genai Bibliothek
     try:
+        # HIER IST DER UNTERSCHIED: Neuer Client, neue Syntax
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+        
         response = client.models.generate_content(
             model="gemini-1.5-flash",
             contents=[image, "Analysiere dieses Supplement. Antworte kurz: Name, Dosis, Zeit."]
         )
         return response.text
     except Exception as e:
-        return f"Fehler: {e}"
+        return f"Fehler bei der Analyse: {e}"
 
 # --- HAUPT-APP ---
 st.title(f"💊 Plan für {user}")
@@ -110,7 +108,6 @@ with tab1:
         if items:
             with st.expander(f"**{category}**", expanded=True):
                 for item in items:
-                    # Der Key enthält jetzt "Katharina", damit ihre Haken eigenständig sind
                     key = f"{user}_{category}_{item['name']}"
                     st.checkbox(f"**{item['name']}** ({item['dosis']})", key=key, help=item.get('info', ''))
 
