@@ -5,9 +5,9 @@ import google.generativeai as genai
 from PIL import Image
 
 # --- KONFIGURATION ---
-st.set_page_config(page_title="Supplement Coach AI", page_icon="💊", layout="centered")
+st.set_page_config(page_title="Supplement Coach", page_icon="💊", layout="centered")
 
-# API Key laden (falls vorhanden)
+# API Key laden
 try:
     if "GOOGLE_API_KEY" in st.secrets:
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -18,12 +18,12 @@ except Exception:
 st.markdown("""
     <style>
     .stCheckbox { padding: 10px; border-radius: 5px; background-color: #f0f2f6; margin-bottom: 5px; }
-    .delete-btn { color: red; border-color: red; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- DATEN: DER START-PLAN ---
-def get_default_plan():
+# --- DATEN: HIER SIND DIE ZWEI PLÄNE ---
+
+def get_plan_eugen():
     return {
         "PRIO (Arzt)": [{"name": "Valsamtrio", "dosis": "Nach Anweisung", "info": "Blutdrucksenker. Morgens!"}],
         "Morgens": [
@@ -49,29 +49,56 @@ def get_default_plan():
         ]
     }
 
-# Session State initialisieren (Plan laden)
+def get_plan_freund():
+    # HIER KANNST DU DIE MEDIKAMENTE DEINES FREUNDES EINTRAGEN
+    return {
+        "Morgens": [
+            {"name": "Multivitamin", "dosis": "1 Tablette", "info": "Allgemein"},
+            {"name": "Kaffee", "dosis": "1 Tasse", "info": "Wachmacher"}
+        ],
+        "Abends": [
+            {"name": "Magnesium Sport", "dosis": "2 Kapseln", "info": "Nach dem Training"}
+        ]
+    }
+
+# --- SIDEBAR: BENUTZER AUSWAHL ---
+st.sidebar.header("Benutzerprofil")
+user = st.sidebar.radio("Wer nutzt die App?", ["Eugen", "Freund"])
+
+# Session State Reset bei Benutzerwechsel
+if 'current_user' not in st.session_state:
+    st.session_state.current_user = user
+
+if st.session_state.current_user != user:
+    st.session_state.current_user = user
+    # Plan neu laden basierend auf Auswahl
+    if user == "Eugen":
+        st.session_state.plan = get_plan_eugen()
+    else:
+        st.session_state.plan = get_plan_freund()
+    st.rerun()
+
+# Initiales Laden beim allerersten Start
 if 'plan' not in st.session_state:
-    st.session_state.plan = get_default_plan()
+    if user == "Eugen":
+        st.session_state.plan = get_plan_eugen()
+    else:
+        st.session_state.plan = get_plan_freund()
+
 
 # --- FUNKTIONEN ---
 def delete_item(category, item_name):
-    # Löscht ein Element aus der Liste
     st.session_state.plan[category] = [i for i in st.session_state.plan[category] if i['name'] != item_name]
     st.rerun()
 
 def analyze_image(image):
-    # KI Funktion
     if "GOOGLE_API_KEY" not in st.secrets:
         return "Fehler: Kein API Key hinterlegt."
     
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    prompt = """
-    Analysiere dieses Foto eines Nahrungsergänzungsmittels.
-    Antworte kurz im Format:
-    Name: [Produktname]
-    Dosis: [Empfohlene Dosis]
-    Zeit: [Tageszeit]
-    """
+    # HIER IST DIE ÄNDERUNG: PRO STATT FLASH
+    model = genai.GenerativeModel('gemini-1.5-pro')
+    
+    prompt = "Analysiere dieses Supplement. Antworte kurz: Name, Dosis, Zeit."
     try:
         response = model.generate_content([prompt, image])
         return response.text
@@ -79,50 +106,40 @@ def analyze_image(image):
         return f"Fehler: {e}"
 
 # --- HAUPT-APP ---
-st.title("💊 Supplement Coach")
+st.title(f"💊 Plan für {user}")
 
-# Tabs
 tab1, tab2, tab3, tab4 = st.tabs(["✅ Plan", "📸 Scan", "📊 Stats", "⚙️ Einstellungen"])
 
-# TAB 1: DER PLAN
 with tab1:
-    st.caption(f"Heute: {date.today().strftime('%d.%m.%Y')}")
-    
+    st.caption(f"Datum: {date.today().strftime('%d.%m.%Y')}")
     for category, items in st.session_state.plan.items():
-        if items: # Nur anzeigen wenn nicht leer
+        if items:
             with st.expander(f"**{category}**", expanded=True):
                 for item in items:
-                    key = f"chk_{category}_{item['name']}"
+                    key = f"{user}_{category}_{item['name']}" # Wichtig: User im Key trennt die Haken
                     st.checkbox(f"**{item['name']}** ({item['dosis']})", key=key, help=item.get('info', ''))
 
-# TAB 2: SCANNER
 with tab2:
     st.header("Neu hinzufügen")
+    st.info(f"Füge ein Mittel zum Plan von **{user}** hinzu.")
     img_file = st.camera_input("Foto machen")
     if img_file:
         image = Image.open(img_file)
         st.image(image, width=200)
-        with st.spinner("Analysiere..."):
+        with st.spinner("Analysiere mit Gemini Pro..."):
             st.info(analyze_image(image))
 
-# TAB 3: STATISTIK
 with tab3:
-    st.subheader("Übersicht")
-    chart_data = pd.DataFrame({'Tag': ['Mo', 'Di', 'Mi', 'Do', 'Fr'], 'Treue': [80, 90, 100, 85, 100]})
-    st.bar_chart(chart_data, x='Tag', y='Treue')
+    st.subheader("Statistik")
+    st.bar_chart(pd.DataFrame({'Tag': ['Mo', 'Di'], 'Werte': [80, 95]}))
 
-# TAB 4: EINSTELLUNGEN (LÖSCHEN)
 with tab4:
-    st.header("Plan bearbeiten")
-    st.info("Hier kannst du Mittel aus deinem Tagesplan entfernen.")
-    
+    st.header(f"Plan von {user} bearbeiten")
     for category, items in st.session_state.plan.items():
         if items:
             st.subheader(category)
             for item in items:
                 col1, col2 = st.columns([4, 1])
                 col1.write(f"**{item['name']}**")
-                
-                # Der Lösch-Button
-                if col2.button("🗑️", key=f"del_{item['name']}"):
+                if col2.button("🗑️", key=f"del_{user}_{item['name']}"):
                     delete_item(category, item['name'])
