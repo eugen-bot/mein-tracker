@@ -1,18 +1,11 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
-import google.generativeai as genai
+from google import genai
 from PIL import Image
 
 # --- KONFIGURATION ---
 st.set_page_config(page_title="Supplement Coach", page_icon="💊", layout="centered")
-
-# API Key laden
-try:
-    if "GOOGLE_API_KEY" in st.secrets:
-        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-except Exception:
-    pass 
 
 # --- STYLING ---
 st.markdown("""
@@ -21,8 +14,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- DATEN: HIER SIND DIE ZWEI PLÄNE ---
-
+# --- DATEN: DEIN PLAN ---
 def get_plan_eugen():
     return {
         "PRIO (Arzt)": [{"name": "Valsamtrio", "dosis": "Nach Anweisung", "info": "Blutdrucksenker. Morgens!"}],
@@ -49,23 +41,25 @@ def get_plan_eugen():
         ]
     }
 
-def get_plan_freund():
-    # HIER KANNST DU DIE MEDIKAMENTE DEINES FREUNDES EINTRAGEN
+# --- DATEN: PLAN FÜR KATHARINA ---
+def get_plan_katharina():
+    # Hier kannst du Katharinas echte Mittel eintragen
     return {
         "Morgens": [
-            {"name": "Multivitamin", "dosis": "1 Tablette", "info": "Allgemein"},
-            {"name": "Kaffee", "dosis": "1 Tasse", "info": "Wachmacher"}
+            {"name": "Multivitamin", "dosis": "1 Tablette", "info": "Basis-Versorgung"},
+            {"name": "Eisen + C", "dosis": "1 Tablette", "info": "Bei Bedarf"}
         ],
         "Abends": [
-            {"name": "Magnesium Sport", "dosis": "2 Kapseln", "info": "Nach dem Training"}
+            {"name": "Magnesium", "dosis": "2 Kapseln", "info": "Entspannung"}
         ]
     }
 
-# --- SIDEBAR: BENUTZER AUSWAHL ---
+# --- SIDEBAR: PROFIL WAHL ---
 st.sidebar.header("Benutzerprofil")
-user = st.sidebar.radio("Wer nutzt die App?", ["Eugen", "Freund"])
+# Jetzt mit Katharina statt Freund
+user = st.sidebar.radio("Wer nutzt die App?", ["Eugen", "Katharina"])
 
-# Session State Reset bei Benutzerwechsel
+# Session State Logik für Benutzerwechsel
 if 'current_user' not in st.session_state:
     st.session_state.current_user = user
 
@@ -75,16 +69,15 @@ if st.session_state.current_user != user:
     if user == "Eugen":
         st.session_state.plan = get_plan_eugen()
     else:
-        st.session_state.plan = get_plan_freund()
+        st.session_state.plan = get_plan_katharina()
     st.rerun()
 
-# Initiales Laden beim allerersten Start
+# Initiales Laden
 if 'plan' not in st.session_state:
     if user == "Eugen":
         st.session_state.plan = get_plan_eugen()
     else:
-        st.session_state.plan = get_plan_freund()
-
+        st.session_state.plan = get_plan_katharina()
 
 # --- FUNKTIONEN ---
 def delete_item(category, item_name):
@@ -93,14 +86,15 @@ def delete_item(category, item_name):
 
 def analyze_image(image):
     if "GOOGLE_API_KEY" not in st.secrets:
-        return "Fehler: Kein API Key hinterlegt."
+        return "Fehler: Kein API Key in den Secrets gefunden."
     
-    # HIER IST DIE ÄNDERUNG: PRO STATT FLASH
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    
-    prompt = "Analysiere dieses Supplement. Antworte kurz: Name, Dosis, Zeit."
+    # Nutzung der neuen google-genai Bibliothek
     try:
-        response = model.generate_content([prompt, image])
+        client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=[image, "Analysiere dieses Supplement. Antworte kurz: Name, Dosis, Zeit."]
+        )
         return response.text
     except Exception as e:
         return f"Fehler: {e}"
@@ -116,7 +110,8 @@ with tab1:
         if items:
             with st.expander(f"**{category}**", expanded=True):
                 for item in items:
-                    key = f"{user}_{category}_{item['name']}" # Wichtig: User im Key trennt die Haken
+                    # Der Key enthält jetzt "Katharina", damit ihre Haken eigenständig sind
+                    key = f"{user}_{category}_{item['name']}"
                     st.checkbox(f"**{item['name']}** ({item['dosis']})", key=key, help=item.get('info', ''))
 
 with tab2:
@@ -126,7 +121,7 @@ with tab2:
     if img_file:
         image = Image.open(img_file)
         st.image(image, width=200)
-        with st.spinner("Analysiere mit Gemini Pro..."):
+        with st.spinner("Analysiere..."):
             st.info(analyze_image(image))
 
 with tab3:
